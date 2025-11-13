@@ -95,22 +95,24 @@ def geraBasePartidas(date):
         try:
             # Recupera os dados necessários
             liga.append(dadosPredictions["response"][0]["league"]["name"])
-            timeCasa.append(dadosPredictions["response"][0]["teams"]["home"]["name"])
+            timeCasaStr = dadosPredictions["response"][0]["teams"]["home"]["name"] # Armazena em variável para utilizar no vencedor
+            timeCasa.append(timeCasaStr)
             logoTimeCasa.append(dadosPredictions["response"][0]["teams"]["home"]["logo"])
-            timeVisitante.append(dadosPredictions["response"][0]["teams"]["away"]["name"])
+            timeVisitanteStr = dadosPredictions["response"][0]["teams"]["away"]["name"] # Armazena em variável para utilizar no vencedor
+            timeVisitante.append(timeVisitanteStr)
             logoTimeVisitante.append(dadosPredictions["response"][0]["teams"]["away"]["logo"])
             winOrDraw.append(dadosPredictions["response"][0]["predictions"]["win_or_draw"])
             predictionVencedor.append(dadosPredictions["response"][0]["predictions"]["winner"]["name"] if winOrDraw else "Empate")
-            casaVencedor.append(dadosFixtures["response"][0]["teams"]["home"]["winner"])
-            visitanteVencedor.append(dadosFixtures["response"][0]["teams"]["away"]["winner"])
-            # aqui tá errado
-            vencedor.append(timeCasa if casaVencedor and (not visitanteVencedor) else (timeVisitante if visitanteVencedor and (not casaVencedor) else "Empate"))
+            casaVencedor = dadosFixtures["response"][0]["teams"]["home"]["winner"]
+            visitanteVencedor = dadosFixtures["response"][0]["teams"]["away"]["winner"]
+            vencedor.append(timeCasaStr if casaVencedor and (not visitanteVencedor) else (timeVisitanteStr if visitanteVencedor and (not casaVencedor) else "Empate"))
             predictionGolsCasa.append(abs(float(dadosPredictions["response"][0]["predictions"]["goals"]["home"])))
             golsCasaAux = dadosFixtures["response"][0]["goals"]["home"]
             golsCasa.append(golsCasaAux if golsCasaAux != None else 0)
             predictionGolsVisitante.append(abs(float(dadosPredictions["response"][0]["predictions"]["goals"]["away"])))
             golsVisitanteAux = dadosFixtures["response"][0]["goals"]["away"]
             golsVisitante.append(golsVisitanteAux if golsVisitanteAux != None else 0)
+
         except Exception as e:
             print(f"Erro na partida {idPartida}: {e}")
 
@@ -140,7 +142,7 @@ def geraBasePartidas(date):
                     })
 
     # Exporta o dataframe para excel
-    df.to_excel('partidas.xlsx', sheet_name='sheet1', index=False)
+    df.to_excel(f"partidas{date}.xlsx", sheet_name='sheet1', index=False)
 
     return 'OK'
 
@@ -187,7 +189,7 @@ def geraBasePartidaUnica(idPartida):
 
 
 
-# Testes EXLCUIR 1477941
+# Testes (Ex. partida: 1477941
 # print(json.dumps(dados, indent=4, ensure_ascii=False))
 #getBasePartidaUnica(1477941)
-print(geraBasePartidas('2025-11-05'))
+print(geraBasePartidas('2025-11-12'))

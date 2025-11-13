@@ -1,12 +1,28 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import api
+
+from pathlib import Path
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 st.set_page_config(page_title="Big Data Soccer", layout="wide")
 
 # ---------------------------------------------------
-# Carregar dataset
-df = pd.read_excel("partidas.xlsx")
+# Recupera o dia
+ontem = (datetime.now(ZoneInfo("UTC")).date() - timedelta(days=1)).isoformat()
+
+# Recupera o nome do arquivo esperado
+filename = Path(f"partidas{ontem}.xlsx")
+
+# Verifica se a base já foi gerada
+if not filename.exists():
+    # Só gera se não existir
+    api.geraBasePartidas(ontem)
+
+# Carrega a base de dados
+df = pd.read_excel(filename)
 
 # Cria coluna de identificação da partida
 df["Partida"] = df["Casa"] + " x " + df["Visitante"]
