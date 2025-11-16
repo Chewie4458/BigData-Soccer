@@ -1,7 +1,9 @@
 import http.client
 import requests
 import json
+import glob
 from pandas import DataFrame
+import pandas as pd
 
 # salvar nome do arquivo com data ex partida04112025
 # no front vai verificar se o da data que precisa já existe - se não existe faz a requisição
@@ -62,15 +64,13 @@ def geraBasePartidas(date):
     qtdPartidas = 0
 
     # Inicializa os array para armazenar os dados
+    data = []
     liga = []
     timeCasa = []
     logoTimeCasa = []
     timeVisitante = []
     logoTimeVisitante = []
-    winOrDraw = []
     predictionVencedor = []
-    casaVencedor = []
-    visitanteVencedor = []
     vencedor = []
     predictionGolsCasa = []
     golsCasa = []
@@ -94,6 +94,7 @@ def geraBasePartidas(date):
 
         try:
             # Recupera os dados necessários
+            data.append(date) # Arrumar para pegar data e hora do retorno
             liga.append(dadosPredictions["response"][0]["league"]["name"])
             timeCasaStr = dadosPredictions["response"][0]["teams"]["home"]["name"] # Armazena em variável para utilizar no vencedor
             timeCasa.append(timeCasaStr)
@@ -101,7 +102,7 @@ def geraBasePartidas(date):
             timeVisitanteStr = dadosPredictions["response"][0]["teams"]["away"]["name"] # Armazena em variável para utilizar no vencedor
             timeVisitante.append(timeVisitanteStr)
             logoTimeVisitante.append(dadosPredictions["response"][0]["teams"]["away"]["logo"])
-            winOrDraw.append(dadosPredictions["response"][0]["predictions"]["win_or_draw"])
+            winOrDraw = dadosPredictions["response"][0]["predictions"]["win_or_draw"]
             predictionVencedor.append(dadosPredictions["response"][0]["predictions"]["winner"]["name"] if winOrDraw else "Empate")
             casaVencedor = dadosFixtures["response"][0]["teams"]["home"]["winner"]
             visitanteVencedor = dadosFixtures["response"][0]["teams"]["away"]["winner"]
@@ -122,13 +123,13 @@ def geraBasePartidas(date):
             logoTimeCasa.pop()
             timeVisitante.pop()
             logoTimeVisitante.pop()
-            winOrDraw.pop()
             predictionVencedor.pop()
 
             break
 
     # Transforma os dados em dataframe
-    df = DataFrame({'Liga': liga,
+    df = DataFrame({'Data': data,
+                    'Liga': liga,
                     'Casa': timeCasa,
                     'Logo Casa': logoTimeCasa,
                     'Visitante': timeVisitante,
@@ -183,13 +184,32 @@ def geraBasePartidaUnica(idPartida):
                     })
 
     # Exporta o dataframe para excel
-    df.to_excel('partidas.xlsx', sheet_name='sheet1', index=False)
+    df.to_excel(f'partida{idPartida}.xlsx', sheet_name='sheet1', index=False)
 
     return 'OK'
 
+# Função para mergear todas as bases geradas
+def mergeBases():
+    # Encontra todos os arquivos que começam com "partidas" e terminam com .xlsx
+    arquivos = glob.glob("partidas*.xlsx")
+
+    dfs = []  # lista para armazenar todos os DataFrames
+
+    for arquivo in arquivos:
+        df = pd.read_excel(arquivo)
+        dfs.append(df)
+
+    # Concatena tudo em um DataFrame só
+    df_final = pd.concat(dfs, ignore_index=True)
+
+    # Remove duplicatas (caso existam registros repetidos)
+    df_final = df_final.drop_duplicates()
+
+    # Salva em um novo arquivo
+    df_final.to_excel("partidas_merged.xlsx", index=False)
 
 
 # Testes (Ex. partida: 1477941
 # print(json.dumps(dados, indent=4, ensure_ascii=False))
 #getBasePartidaUnica(1477941)
-print(geraBasePartidas('2025-11-12'))
+#print(geraBasePartidas('2025-11-15'))
