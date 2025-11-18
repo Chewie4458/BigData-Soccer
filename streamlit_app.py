@@ -54,13 +54,6 @@ def mostrar_painel_geral():
     # ==========================
     st.subheader("📊 Estatísticas Gerais")
 
-    # Converter datas sem quebrar
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-
-    # Criar string bonita para exibir
-    df["Data_Str"] = df["Data"].dt.strftime("%d/%m/%Y — %H:%M")
-    df["Data_Str"] = df["Data_Str"].fillna("Data não disponível")
-
     df["Acertou_Vencedor"] = df["Prediction_Vencedor"] == df["Vencedor"]
 
     df["Acertou"] = np.where(
@@ -104,7 +97,7 @@ def mostrar_painel_geral():
         with cols[i % 3]:
             st.markdown(f"""
             ### {row['Casa']} x {row['Visitante']}
-            <small>📅 {row['Data_Str']}</small>
+            <small>📅 {row['Data']}</small>
             """, unsafe_allow_html=True)
 
             col_a, col_b = st.columns(2)

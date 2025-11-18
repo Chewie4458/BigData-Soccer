@@ -4,17 +4,45 @@ import json
 import glob
 from pandas import DataFrame
 import pandas as pd
-
-# salvar nome do arquivo com data ex partida04112025
-# no front vai verificar se o da data que precisa já existe - se não existe faz a requisição
-# fazer uma chamada só
-    # pega as partidas
-    # faz um for e pega as predictions de cada partida
-    # joga tudo para uma única base (excel)
+from datetime import datetime, timezone
+try:
+    # python 3.9+: ZoneInfo no stdlib
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 headers = {
     'x-apisports-key': "0083b88b9e9da5f8c1dcaabe3dfa4275"
     }
+
+# Função para converter a data retornada
+def format_timestamp(timestamp, target_tz="America/Sao_Paulo"):
+    if timestamp is None:
+        return None, "Data não disponível"
+
+    try:
+        # timestamp sempre interpretado como UTC
+        dt_utc = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+
+        # converte para o timezone desejado
+        dt_local = dt_utc.astimezone(ZoneInfo(target_tz))
+
+        # cria a string bonitinha
+        formatted = dt_local.strftime("%d/%m/%Y — %H:%M")
+
+        return dt_local, formatted
+
+    except Exception:
+        return None, "Data inválida"
+
+# Função para converter para float - trata caso seja None
+def safe_float(value):
+    try:
+        if value is None:
+            return 0.0
+        return float(value)
+    except:
+        return 0.0
 
 # Função que recupera todas as partidas de um dia específico (AAAA-MM-DD)
 def getPartidas(date):
@@ -94,7 +122,10 @@ def geraBasePartidas(date):
 
         try:
             # Recupera os dados necessários
-            data.append(date) # Arrumar para pegar data e hora do retorno
+            timestamp = dadosFixtures["response"][0]["fixture"]["timestamp"]
+            dt_obj, dt_str = format_timestamp(timestamp)
+            # data.append(dt_obj) - não utilizado no momento
+            data.append(dt_str)
             liga.append(dadosPredictions["response"][0]["league"]["name"])
             timeCasaStr = dadosPredictions["response"][0]["teams"]["home"]["name"] # Armazena em variável para utilizar no vencedor
             timeCasa.append(timeCasaStr)
@@ -107,23 +138,15 @@ def geraBasePartidas(date):
             casaVencedor = dadosFixtures["response"][0]["teams"]["home"]["winner"]
             visitanteVencedor = dadosFixtures["response"][0]["teams"]["away"]["winner"]
             vencedor.append(timeCasaStr if casaVencedor and (not visitanteVencedor) else (timeVisitanteStr if visitanteVencedor and (not casaVencedor) else "Empate"))
-            predictionGolsCasa.append(abs(float(dadosPredictions["response"][0]["predictions"]["goals"]["home"])))
+            predictionGolsCasa.append(abs(safe_float(dadosPredictions["response"][0]["predictions"]["goals"]["home"])))
             golsCasaAux = dadosFixtures["response"][0]["goals"]["home"]
             golsCasa.append(golsCasaAux if golsCasaAux != None else 0)
-            predictionGolsVisitante.append(abs(float(dadosPredictions["response"][0]["predictions"]["goals"]["away"])))
+            predictionGolsVisitante.append(abs(safe_float(dadosPredictions["response"][0]["predictions"]["goals"]["away"])))
             golsVisitanteAux = dadosFixtures["response"][0]["goals"]["away"]
             golsVisitante.append(golsVisitanteAux if golsVisitanteAux != None else 0)
 
         except Exception as e:
             print(f"Erro na partida {idPartida}: {e}")
-
-            # Remove os últimos elementos adicionados antes do erro
-            liga.pop()
-            timeCasa.pop()
-            logoTimeCasa.pop()
-            timeVisitante.pop()
-            logoTimeVisitante.pop()
-            predictionVencedor.pop()
 
             break
 
@@ -212,4 +235,4 @@ def mergeBases():
 # Testes (Ex. partida: 1477941
 # print(json.dumps(dados, indent=4, ensure_ascii=False))
 #getBasePartidaUnica(1477941)
-#print(geraBasePartidas('2025-11-15'))
+#print(geraBasePartidas('2025-11-16'))
