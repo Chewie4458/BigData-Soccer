@@ -1,3 +1,7 @@
+from math import trunc
+from stat import filemode
+
+import numpy as np
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -6,6 +10,9 @@ import api
 from pathlib import Path
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+# Configura se vai utilizar o merge nas bases
+CONFIG_MERGE = True
 
 st.set_page_config(page_title="Big Data Soccer", layout="wide")
 
@@ -22,6 +29,10 @@ if not filename.exists():
     api.geraBasePartidas(ontem)
 
 # Carrega a base de dados
+if CONFIG_MERGE:
+    api.mergeBases()
+    filename = Path(f"partidas_merged.xlsx")
+
 df = pd.read_excel(filename)
 
 # Cria coluna de identificação da partida
@@ -45,6 +56,12 @@ def mostrar_painel_geral():
 
     df["Acertou_Vencedor"] = df["Prediction_Vencedor"] == df["Vencedor"]
 
+    df["Acertou"] = np.where(
+        df["Acertou_Vencedor"],
+        "sim",
+        "não"
+    )
+
     total_partidas = len(df)
     taxa_acerto = df["Acertou_Vencedor"].mean() * 100
     media_prev_gols_casa = df["Prediction_Gols_Casa"].mean()
@@ -64,8 +81,8 @@ def mostrar_painel_geral():
     chart_resultado = alt.Chart(df).mark_bar().encode(
         x=alt.X("Prediction_Vencedor", title="Vencedor Previsto"),
         y=alt.Y("count()", title="Número de Partidas"),
-        color=alt.Color("Acertou_Vencedor:N", title="Acertou?"),
-        tooltip=["Prediction_Vencedor", "Vencedor", "Acertou_Vencedor"]
+        color=alt.Color("Acertou:N", title="Acertou?"),
+        tooltip=["Prediction_Vencedor", "Vencedor", "Acertou"]
     ).properties(height=400)
 
     st.altair_chart(chart_resultado, use_container_width=True)
@@ -78,14 +95,17 @@ def mostrar_painel_geral():
     cols = st.columns(3)
     for i, (_, row) in enumerate(df.iterrows()):
         with cols[i % 3]:
-            st.markdown(f"### {row['Casa']} x {row['Visitante']}")
+            st.markdown(f"""
+            ### {row['Casa']} x {row['Visitante']}
+            <small>📅 {row['Data']}</small>
+            """, unsafe_allow_html=True)
 
             col_a, col_b = st.columns(2)
             with col_a:
-                if "Logo Casa" in df.columns and pd.notna(row["Logo Casa"]):
+                if pd.notna(row.get("Logo Casa")):
                     st.image(row["Logo Casa"], width=80)
             with col_b:
-                if "Logo Visitante" in df.columns and pd.notna(row["Logo Visitante"]):
+                if pd.notna(row.get("Logo Visitante")):
                     st.image(row["Logo Visitante"], width=80)
 
             st.markdown(f"""
@@ -96,6 +116,7 @@ def mostrar_painel_geral():
             if st.button("🔍 Ver detalhes", key=row["Partida"]):
                 st.session_state.partida_selecionada = row["Partida"]
                 st.rerun()
+
 
 # ---------------------------------------------------
 # Função: tela detalhada da partida
@@ -109,14 +130,14 @@ def mostrar_detalhes(partida_nome):
         if "Img_Casa" in df.columns and pd.notna(partida["Img_Casa"]):
             st.image(partida["Img_Casa"], width=120)
         st.markdown(f"### {partida['Casa']}")
-        st.metric("Previsão de Gols", partida["Prediction_Gols_Casa"])
+        st.metric("Previsão de Gols", f"até {trunc(partida["Prediction_Gols_Casa"])}")
         st.metric("Gols Reais", partida["Gols_Casa"])
 
     with col3:
         if "Img_Visitante" in df.columns and pd.notna(partida["Img_Visitante"]):
             st.image(partida["Img_Visitante"], width=120)
         st.markdown(f"### {partida['Visitante']}")
-        st.metric("Previsão de Gols", partida["Prediction_Gols_Visitante"])
+        st.metric("Previsão de Gols", f"até {trunc(partida["Prediction_Gols_Visitante"])}")
         st.metric("Gols Reais", partida["Gols_Visitante"])
 
     with col2:
@@ -129,18 +150,53 @@ def mostrar_detalhes(partida_nome):
         else:
             st.error("❌ A previsão de vencedor foi **incorreta.**")
 
-    # Gráfico comparativo de gols
+    # --- preparar dataframe ---
     df_gols = pd.DataFrame({
         "Tipo": ["Previsão", "Real"],
         "Mandante": [partida["Prediction_Gols_Casa"], partida["Gols_Casa"]],
         "Visitante": [partida["Prediction_Gols_Visitante"], partida["Gols_Visitante"]],
     }).melt(id_vars="Tipo", var_name="Time", value_name="Gols")
 
-    chart = alt.Chart(df_gols).mark_bar().encode(
-        x=alt.X("Time", title=""),
-        y=alt.Y("Gols", title="Quantidade de Gols"),
-        color="Tipo",
-    ).properties(height=400, title="Comparação de Gols: Previsão vs Real")
+    # garantir que o eixo y comece em 0 e com folga superior para rótulos
+    y_max = int(df_gols["Gols"].max() + 2)
+
+    # --- gráfico de barras lado-a-lado (dodged) ---
+    bars = alt.Chart(df_gols).mark_bar(size=40).encode(
+        x=alt.X("Time:N", title="", axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y("Gols:Q", title="Quantidade de Gols", scale=alt.Scale(domain=[0, y_max])),
+        color=alt.Color("Tipo:N", title="Tipo"),
+        tooltip=[alt.Tooltip("Time:N"), alt.Tooltip("Tipo:N"), alt.Tooltip("Gols:Q")],
+        # canal para "deslocar" as barras por categoria (dodged)
+        xOffset="Tipo:N"
+    ).properties(
+        height=400,
+        title="Comparação de Gols: Previsão vs Real"
+    )
+
+    # rótulos sobre as barras
+    labels = alt.Chart(df_gols).mark_text(dy=-10, fontSize=12).encode(
+        x=alt.X("Time:N"),
+        y=alt.Y("Gols:Q"),
+        text=alt.Text("Gols:Q"),
+        xOffset="Tipo:N"
+    )
+
+    # --- opcional: calcular diferença e mostrar como texto acima do grupo ---
+    df_diff = df_gols.pivot(index="Time", columns="Tipo", values="Gols").reset_index()
+    df_diff["Diff"] = df_diff["Previsão"] - df_diff["Real"]
+
+    diff_text = alt.Chart(df_diff).mark_text(dy=-40, fontSize=12, fontWeight="bold").encode(
+        x=alt.X("Time:N"),
+        # posicionar sempre no topo do gráfico (valor fixo)
+        y=alt.value(y_max - 0.2),
+        text=alt.Text("Diff:Q", format="+d"),  # ex: +2 ou -1
+        tooltip=[alt.Tooltip("Time:N"), alt.Tooltip("Diff:Q", title="Previsão − Real")]
+    )
+
+    # montar camada final
+    chart = (bars + labels + diff_text).configure_title(fontSize=16).configure_legend(
+        orient="right"
+    )
 
     st.altair_chart(chart, use_container_width=True)
 
